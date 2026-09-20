@@ -1,0 +1,45 @@
+name: Update GeoIP CN PBR rules
+
+on:
+  schedule:
+    - cron: "17 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-geoip-cn
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate rule file
+        run: python3 scripts/generate.py
+
+      - name: Run tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Check shell syntax
+        run: sh -n src/pbr.user.geoip-cn
+
+      - name: Commit updated rules
+        run: |
+          if git diff --quiet -- src/pbr.user.geoip-cn; then
+            echo "GeoIP CN rules are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pbr.user.geoip-cn
+          git commit -m "chore: update GeoIP CN PBR rules"
+          git push
