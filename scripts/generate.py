@@ -13,6 +13,7 @@ import urllib.request
 DEFAULT_SOURCE = (
     "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt"
 )
+NFT_CHUNK_SIZE = 256
 
 
 def read_source(source: str) -> str:
@@ -63,15 +64,18 @@ def parse_networks(raw: str) -> tuple[list[ipaddress.IPv4Network], list[ipaddres
     return ipv4, ipv6
 
 
-def nft_block(
+def nft_commands(
     networks: list[ipaddress.IPv4Network] | list[ipaddress.IPv6Network],
     set_name: str,
 ) -> list[str]:
-    lines = ["nft -f - <<EOF || _ret=1", f"add element $TARGET_TABLE {set_name} {{"]
-    for index, network in enumerate(networks):
-        suffix = "," if index + 1 < len(networks) else ""
-        lines.append(f"  {network}{suffix}")
-    lines.extend(["}", "EOF"])
+    lines: list[str] = []
+    for offset in range(0, len(networks), NFT_CHUNK_SIZE):
+        elements = ", ".join(
+            str(network) for network in networks[offset : offset + NFT_CHUNK_SIZE]
+        )
+        lines.append(
+            f'nft "add element $TARGET_TABLE {set_name} {{ {elements} }}" || _ret=1'
+        )
     return lines
 
 
@@ -93,9 +97,7 @@ def render(
         "_ret=0",
         "",
     ]
-    lines.extend(
-        nft_block(ipv4, "pbr_${TARGET_INTERFACE}_4_dst_ip_user")
-    )
+    lines.extend(nft_commands(ipv4, "pbr_${TARGET_INTERFACE}_4_dst_ip_user"))
     if ipv6:
         lines.extend(
             [
@@ -104,8 +106,8 @@ def render(
             ]
         )
         lines.extend(
-            f"  {line}" if line not in {"EOF"} else line
-            for line in nft_block(ipv6, "pbr_${TARGET_INTERFACE}_6_dst_ip_user")
+            f"  {line}"
+            for line in nft_commands(ipv6, "pbr_${TARGET_INTERFACE}_6_dst_ip_user")
         )
         lines.append("fi")
     lines.extend(["", "( exit \"$_ret\" )", ""])
@@ -116,7 +118,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default=DEFAULT_SOURCE)
     parser.add_argument("--output", default="src/pbr.user.geoip-cn")
-    parser.add_argument("--target-interface", default="wan")
+    parser.add_argument("--target-interface", default="wan9929")
     parser.add_argument("--minimum-ipv4", type=int, default=1000)
     parser.add_argument("--minimum-ipv6", type=int, default=10)
     args = parser.parse_args()

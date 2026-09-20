@@ -6,7 +6,7 @@ IPv4/IPv6 CIDR 列表转换成 OpenWrt [`pbr`](https://docs.openwrt.melmac.net/p
 
 ## 使用
 
-默认产物把中国大陆目标地址路由到 `wan`。下载脚本：
+默认产物按本仓库作者的 OpenWrt 配置，把中国大陆目标地址路由到 `wan9929`。下载脚本：
 
 ```sh
 mkdir -p /etc/pbr.d
@@ -25,7 +25,16 @@ config include
         option enabled '1'
 ```
 
-若目标接口不是 `wan`，请修改产物开头的 `TARGET_INTERFACE`，或者生成自己的版本：
+若你的目标接口不是 `wan9929`，必须修改产物开头的 `TARGET_INTERFACE`，而且接口名必须与
+`/etc/config/network` 和 PBR 状态中显示的逻辑接口名完全一致。例如路由到 `wan4837`：
+
+```sh
+sed -i "s/TARGET_INTERFACE='wan9929'/TARGET_INTERFACE='wan4837'/" \
+  /etc/pbr.d/pbr.user.geoip-cn
+/etc/init.d/pbr restart
+```
+
+也可以直接生成对应接口的版本：
 
 ```sh
 python3 scripts/generate.py --target-interface wg0
@@ -33,6 +42,10 @@ python3 scripts/generate.py --target-interface wg0
 
 接口名是 OpenWrt 逻辑接口名，并且必须是 `pbr` 已支持的接口。IPv6 规则仅在
 `pbr.config.ipv6_enabled=1` 时加载。
+
+生成的脚本通过 PBR 提供的 `nft()` 函数将分块后的规则写入原子 nft 文件，兼容 PBR
+1.2.2 的 fw4 nft file mode。不要把脚本中的调用改成 `nft -f`，否则 PBR 加载自定义文件时
+会在 `/var/run/pbr.nft` 中写入无效参数。
 
 ## 自动更新
 
